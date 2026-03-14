@@ -20,7 +20,7 @@ argument-hint: <contenido de la tarjeta Linear>
 !`git branch --show-current 2>/dev/null || echo "N/A"`
 
 **Archivos modificados recientemente:**
-!`git log --oneline -5 2>/dev/null`
+!`git log --oneline -5 2>/dev/null || true`
 
 **Estructura de directorios (2 niveles):**
 !`find . -maxdepth 2 -type d -not -path "*/\.*" -not -path "*/node_modules/*" -not -path "*/__pycache__/*" -not -path "*/venv/*" 2>/dev/null | head -40`
