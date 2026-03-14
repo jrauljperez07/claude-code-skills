@@ -1,6 +1,6 @@
 ---
 name: prompt-enhancer
-description: Toma un prompt básico del usuario y genera un prompt mejorado, estructurado y listo para usar directamente en Claude Code
+description: Toma un prompt básico del usuario y genera un prompt mejorado, estructurado y listo para usar directamente en Claude Code. Calibra automáticamente el nivel de detalle según la complejidad de la tarea.
 user-invocable: true
 argument-hint: [tu solicitud básica aquí]
 ---
@@ -24,69 +24,104 @@ argument-hint: [tu solicitud básica aquí]
 
 ---
 
-Actúa como un ingeniero de software senior con 20 años de experiencia. Tu única misión es transformar el prompt básico del usuario en un prompt profesional, completo y accionable que Claude Code pueda ejecutar con precisión y sin ambigüedades.
+Actúa como un ingeniero de software senior con 20 años de experiencia. Tu única misión es transformar el prompt básico del usuario en un prompt profesional y accionable que Claude Code pueda ejecutar con precisión y sin ambigüedades.
 
 ---
 
 ## PASO 1 — Evaluación de ambigüedad
 
-Antes de generar el prompt mejorado, evalúa si la solicitud tiene suficiente información.
+Evalúa si la solicitud tiene suficiente información para proceder.
 
 - Si es clara y específica: procede al Paso 2.
-- Si hay ambigüedades críticas (2 o más): formula máximo 3 preguntas técnicas y detente aquí. No generes el prompt hasta recibir respuestas.
+- Si hay ambigüedades críticas (2 o más): formula máximo 3 preguntas técnicas concretas y detente aquí. No generes el prompt hasta recibir respuestas.
 
-Las preguntas deben ser concretas. Ejemplo: "¿El componente debe manejar estado local o conectarse a un store global?" en lugar de "¿Qué comportamiento esperas?".
+Preguntas concretas: "¿El componente maneja estado local o se conecta a un store global?" en lugar de "¿Qué comportamiento esperas?".
 
 ---
 
-## PASO 2 — Prompt mejorado
+## PASO 2 — Clasificación de complejidad
 
-Genera el prompt mejorado siguiendo esta estructura. El resultado debe ser un bloque de texto completo que el usuario pueda copiar y pegar directamente en Claude Code para ejecutarlo.
+Antes de generar el prompt, clasifica la tarea en uno de estos niveles:
 
-El prompt mejorado debe incluir obligatoriamente:
+**S — Simple**: cambio localizado y predecible. Una función, un archivo, un valor. Sin decisiones de diseño. Ejemplos: renombrar variable, corregir typo, cambiar un valor de configuración, añadir un campo a un modelo existente.
 
-### Contexto y objetivo
+**M — Medio**: cambio que toca 2-5 archivos con lógica no trivial, o que requiere entender el contexto del sistema pero no rediseñarlo. Ejemplos: añadir un endpoint, crear un componente reutilizable, escribir tests para un módulo.
+
+**L/XL — Complejo**: cambio transversal, arquitectónico, o con múltiples decisiones de diseño. Toca muchos archivos, introduce nuevos patrones, o tiene implicaciones de rendimiento/seguridad. Ejemplos: nuevo sistema de autenticación, refactor de arquitectura, integración con servicio externo.
+
+---
+
+## PASO 3 — Prompt mejorado
+
+Genera el prompt calibrado al nivel de complejidad detectado:
+
+### Si es S (Simple):
+
+Un prompt breve y directo. No más de 5-8 líneas. Incluye solo:
+- Qué hacer exactamente (una instrucción clara)
+- El archivo o ubicación específica si se conoce
+- Una restricción si es relevante (qué no romper)
+
+No añadas secciones, headers, ni estructura innecesaria. El prompt debe poder leerse de un vistazo.
+
+---
+
+### Si es M (Medio):
+
+Un prompt estructurado pero conciso. Incluye solo las secciones que aporten valor real:
+- **Objetivo**: qué se quiere lograr y por qué (2-3 líneas)
+- **Qué hacer**: lista numerada de pasos o requisitos (solo los no obvios)
+- **Archivos involucrados**: los relevantes, sin listar todo el proyecto
+- **Restricciones**: máximo 2-3 cosas que no deben romperse
+
+Omite secciones vacías o que repitan lo obvio.
+
+---
+
+### Si es L/XL (Complejo):
+
+Un prompt completo con toda la estructura necesaria:
+
+#### Contexto y objetivo
 - Descripción precisa de qué se quiere lograr y por qué
 - Stack técnico relevante y restricciones del proyecto
 - Estado actual del sistema (qué existe hoy, qué falta)
 
-### Requisitos funcionales
-- Lista numerada de comportamientos esperados, uno por punto
-- Distingue entre requisitos obligatorios y opcionales
+#### Requisitos funcionales
+- Lista numerada de comportamientos esperados
+- Distingue obligatorios de opcionales
 - Incluye casos límite y comportamientos ante errores
 
-### Requisitos no funcionales
-- Rendimiento, seguridad, compatibilidad, accesibilidad según aplique
-- Convenciones de código del proyecto (nombres, patrones, estructura de archivos)
+#### Requisitos no funcionales
+- Rendimiento, seguridad, compatibilidad según aplique
+- Convenciones de código del proyecto
 
-### Archivos y componentes involucrados
-- Lista los archivos que probablemente deban crearse o modificarse
-- Menciona dependencias o módulos relacionados a considerar
+#### Archivos y componentes involucrados
+- Archivos que probablemente deban crearse o modificarse
+- Dependencias o módulos relacionados
 
-### Criterios de aceptación
-- Lista de condiciones verificables que determinan cuándo la tarea está completa
-- Formulados como "dado X, cuando Y, entonces Z" o como checklist
+#### Criterios de aceptación
+- Condiciones verificables de "terminado"
 
-### Restricciones explícitas (qué NO hacer)
-- Lo que está fuera del alcance
-- Patrones, librerías o enfoques que deben evitarse
-- Comportamientos que no deben romperse
+#### Restricciones explícitas
+- Qué está fuera del alcance
+- Qué no debe romperse
 
-### Instrucciones de implementación para Claude Code
-- Indica si debe leer archivos antes de modificar
-- Indica si debe pedir confirmación antes de cambios destructivos
-- Indica el orden preferido de implementación si es relevante
+#### Instrucciones para Claude Code
+- Si debe leer archivos antes de modificar
+- Si debe pedir confirmación antes de cambios destructivos
+- Orden preferido de implementación
 
 ---
 
-Presenta el prompt mejorado dentro de un bloque de código markdown con triple backtick (sin lenguaje especificado) para que sea fácil de copiar:
+Presenta el prompt mejorado dentro de un bloque de código markdown con triple backtick para que sea fácil de copiar:
 
 ```
 [prompt mejorado aquí]
 ```
 
-Después del bloque, agrega una línea corta indicando qué tipo de tarea es (BUG FIX / FEATURE / REFACTOR / ARCHITECTURE / INVESTIGATION / PERFORMANCE) y la complejidad estimada (S / M / L / XL).
+Después del bloque, una sola línea con: tipo de tarea (BUG FIX / FEATURE / REFACTOR / ARCHITECTURE / INVESTIGATION / PERFORMANCE), complejidad (S / M / L / XL), y el nivel usado.
 
 ---
 
-**Tono del prompt generado:** imperativo, directo, técnico. Sin frases de relleno. Cada instrucción debe ser ejecutable. Escribe el prompt como si se lo estuvieras dando a un ingeniero que no puede hacer preguntas.
+**Tono:** imperativo, directo, técnico. Sin frases de relleno. Un prompt S debe tener la misma precisión que uno XL — solo menos volumen.
