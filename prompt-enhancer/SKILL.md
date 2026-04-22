@@ -1,11 +1,11 @@
 ---
 name: prompt-enhancer
-description: Toma un prompt básico del usuario y genera un prompt mejorado, estructurado y listo para usar directamente en Claude Code. Calibra automáticamente el nivel de detalle según la complejidad de la tarea.
+description: Detecta automáticamente si el input contiene logs/errores (modo debug) o una instrucción (modo ejecución). En modo debug ejecuta análisis de causa raíz completo. En modo ejecución mejora el prompt y lo ejecuta directamente.
 user-invocable: true
-argument-hint: [tu solicitud básica aquí]
+argument-hint: [instrucción o logs aquí]
 ---
 
-## Solicitud original
+## Input del usuario
 
 > $ARGUMENTS
 
@@ -14,114 +14,105 @@ argument-hint: [tu solicitud básica aquí]
 ## Contexto del proyecto
 
 **Archivos modificados recientemente:**
-!`git diff --name-only HEAD 2>/dev/null | head -20 || echo "Sin cambios recientes o no es un repositorio git"`
-
-**Estructura del proyecto:**
-!`ls -1 2>/dev/null | head -30`
+!`git diff --name-only HEAD 2>/dev/null | head -20 || echo "Sin cambios recientes"`
 
 **Rama actual:**
 !`git branch --show-current 2>/dev/null || echo "N/A"`
 
+**Estructura raíz:**
+!`ls -1 2>/dev/null | head -20`
+
 ---
 
-Actúa como un ingeniero de software senior con 20 años de experiencia. Tu única misión es transformar el prompt básico del usuario en un prompt profesional y accionable que Claude Code pueda ejecutar con precisión y sin ambigüedades.
+Actúa como un ingeniero de software senior con 20 años de experiencia. Antes de hacer cualquier cosa, **detecta el modo correcto** analizando el input.
 
 ---
 
-## PASO 1 — Evaluación de ambigüedad
+## DETECCIÓN DE MODO
+
+Analiza el input y clasifícalo en uno de dos modos:
+
+**MODO DEBUG** — el input contiene cualquiera de estos elementos:
+- Stack traces, tracebacks, o líneas con `Error:`, `Exception:`, `Traceback`, `FATAL`, `CRITICAL`
+- Líneas con timestamps tipo `2024-`, `[ERROR]`, `[WARN]`, `ERROR |`, formato de log estructurado
+- Bloques de texto con indentación de stack frame (`at `, `File "`, `  line `)
+- Mensajes de error de herramientas (pytest, compiler, linter, docker, etc.)
+- El usuario menciona explícitamente "logs", "error", "fallo", "crash", "bug"
+
+**MODO EJECUCIÓN** — todo lo demás: instrucciones, solicitudes de features, preguntas técnicas, tareas de refactor.
+
+---
+
+## SI ES MODO DEBUG — Análisis de causa raíz
+
+No generes un prompt. Ejecuta directamente el siguiente análisis:
+
+### 1. Parseo del error
+- Extrae el mensaje de error principal (la línea más informativa)
+- Identifica el tipo de error (runtime, import, assertion, timeout, network, etc.)
+- Identifica el componente o archivo de origen si aparece en el trace
+
+### 2. Lectura de contexto
+- Usa las herramientas disponibles para leer los archivos relevantes mencionados en el trace
+- Busca en el codebase el código que originó el error
+- Revisa cambios recientes con `git log --oneline -10` y `git diff HEAD~1` si el error parece reciente
+
+### 3. Hipótesis ordenadas por probabilidad
+Lista las causas probables de mayor a menor probabilidad. Para cada una:
+- **Hipótesis**: descripción concreta de qué podría estar fallando
+- **Evidencia**: qué en el log o en el código apoya esta hipótesis
+- **Verificación**: comando o lectura exacta que confirmaría o descartaría esta hipótesis
+
+### 4. Diagnóstico final
+- Indica cuál hipótesis es la más probable con base en la evidencia
+- Si puedes confirmar la causa raíz leyendo el código: hazlo antes de concluir
+- Si necesitas más información del usuario: haz máximo 2 preguntas específicas
+
+### 5. Plan de fix
+- Si la causa raíz está confirmada: propón el fix concreto y ejecútalo si es seguro hacerlo
+- Si no está confirmada: propón el paso de verificación que hay que hacer primero
+- Indica qué tests correr para validar el fix
+
+---
+
+## SI ES MODO EJECUCIÓN — Mejora y ejecuta
+
+### PASO 1 — Evaluación de ambigüedad
 
 Evalúa si la solicitud tiene suficiente información para proceder.
 
 - Si es clara y específica: procede al Paso 2.
-- Si hay ambigüedades críticas (2 o más): formula máximo 3 preguntas técnicas concretas y detente aquí. No generes el prompt hasta recibir respuestas.
+- Si hay ambigüedades críticas (2 o más): formula máximo 3 preguntas técnicas concretas y detente. No mejores ni ejecutes el prompt hasta recibir respuestas.
 
 Preguntas concretas: "¿El componente maneja estado local o se conecta a un store global?" en lugar de "¿Qué comportamiento esperas?".
 
----
+### PASO 2 — Clasificación de complejidad
 
-## PASO 2 — Clasificación de complejidad
+Clasifica la tarea:
 
-Antes de generar el prompt, clasifica la tarea en uno de estos niveles:
+**S — Simple**: cambio localizado, un archivo, sin decisiones de diseño. Renombrar variable, corregir typo, cambiar configuración, añadir campo.
 
-**S — Simple**: cambio localizado y predecible. Una función, un archivo, un valor. Sin decisiones de diseño. Ejemplos: renombrar variable, corregir typo, cambiar un valor de configuración, añadir un campo a un modelo existente.
+**M — Medio**: toca 2-5 archivos con lógica no trivial. Añadir endpoint, crear componente, escribir tests.
 
-**M — Medio**: cambio que toca 2-5 archivos con lógica no trivial, o que requiere entender el contexto del sistema pero no rediseñarlo. Ejemplos: añadir un endpoint, crear un componente reutilizable, escribir tests para un módulo.
+**L/XL — Complejo**: cambio transversal, arquitectónico, múltiples decisiones de diseño. Nuevo sistema, refactor de arquitectura, integración externa.
 
-**L/XL — Complejo**: cambio transversal, arquitectónico, o con múltiples decisiones de diseño. Toca muchos archivos, introduce nuevos patrones, o tiene implicaciones de rendimiento/seguridad. Ejemplos: nuevo sistema de autenticación, refactor de arquitectura, integración con servicio externo.
+### PASO 3 — Construye el prompt mejorado internamente
 
----
+Genera el prompt calibrado al nivel de complejidad (no lo muestres aún):
 
-## PASO 3 — Prompt mejorado
+**Si es S**: breve y directo, máximo 5-8 líneas. Solo qué hacer y una restricción si aplica.
 
-Genera el prompt calibrado al nivel de complejidad detectado:
+**Si es M**: objetivo (2-3 líneas) + lista de pasos no obvios + máximo 3 restricciones.
 
-### Si es S (Simple):
+**Si es L/XL**: estructura completa con contexto/objetivo, requisitos funcionales, requisitos no funcionales, criterios de aceptación, restricciones, e instrucciones para Claude Code.
 
-Un prompt breve y directo. No más de 5-8 líneas. Incluye solo:
-- Qué hacer exactamente (una instrucción clara)
-- El archivo o ubicación específica si se conoce
-- Una restricción si es relevante (qué no romper)
+**Regla crítica:** No menciones nombres de archivos ni rutas en el prompt. Instruye a explorar y analizar el codebase antes de actuar. Usa frases como "analiza el codebase", "explora la implementación relevante", "lee el código necesario antes de modificar".
 
-No añadas secciones, headers, ni estructura innecesaria. El prompt debe poder leerse de un vistazo.
+### PASO 4 — Ejecución directa
 
----
+**No muestres el prompt mejorado en un bloque de código.** En su lugar:
 
-### Si es M (Medio):
+1. Muestra una sola línea de diagnóstico: `→ [TIPO] [COMPLEJIDAD] — ejecutando...` (ej: `→ FEATURE M — ejecutando...`)
+2. Ejecuta el prompt mejorado directamente como si el usuario lo hubiera escrito tú mismo. Usa todas las herramientas disponibles: lee archivos, explora el codebase, implementa los cambios necesarios.
 
-Un prompt estructurado pero conciso. Incluye solo las secciones que aporten valor real:
-- **Objetivo**: qué se quiere lograr y por qué (2-3 líneas)
-- **Qué hacer**: lista numerada de pasos o requisitos (solo los no obvios)
-- **Archivos involucrados**: los relevantes, sin listar todo el proyecto
-- **Restricciones**: máximo 2-3 cosas que no deben romperse
-
-Omite secciones vacías o que repitan lo obvio.
-
----
-
-### Si es L/XL (Complejo):
-
-Un prompt completo con toda la estructura necesaria:
-
-#### Contexto y objetivo
-- Descripción precisa de qué se quiere lograr y por qué
-- Stack técnico relevante y restricciones del proyecto
-- Estado actual del sistema (qué existe hoy, qué falta)
-
-#### Requisitos funcionales
-- Lista numerada de comportamientos esperados
-- Distingue obligatorios de opcionales
-- Incluye casos límite y comportamientos ante errores
-
-#### Requisitos no funcionales
-- Rendimiento, seguridad, compatibilidad según aplique
-- Convenciones de código del proyecto
-
-#### Archivos y componentes involucrados
-- Archivos que probablemente deban crearse o modificarse
-- Dependencias o módulos relacionados
-
-#### Criterios de aceptación
-- Condiciones verificables de "terminado"
-
-#### Restricciones explícitas
-- Qué está fuera del alcance
-- Qué no debe romperse
-
-#### Instrucciones para Claude Code
-- Si debe leer archivos antes de modificar
-- Si debe pedir confirmación antes de cambios destructivos
-- Orden preferido de implementación
-
----
-
-Presenta el prompt mejorado dentro de un bloque de código markdown con triple backtick para que sea fácil de copiar:
-
-```
-[prompt mejorado aquí]
-```
-
-Después del bloque, una sola línea con: tipo de tarea (BUG FIX / FEATURE / REFACTOR / ARCHITECTURE / INVESTIGATION / PERFORMANCE), complejidad (S / M / L / XL), y el nivel usado.
-
----
-
-**Tono:** imperativo, directo, técnico. Sin frases de relleno. Un prompt S debe tener la misma precisión que uno XL — solo menos volumen.
+El usuario no debe tener que copiar nada. El resultado de invocar este skill debe ser la tarea completada, no un prompt para copiar.

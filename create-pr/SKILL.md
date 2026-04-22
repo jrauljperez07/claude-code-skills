@@ -8,16 +8,16 @@ argument-hint: [/path/to/repo] [base-branch] [github-token]
 ## Contexto del repositorio
 
 **Rama actual (head):**
-!`git branch --show-current 2>/dev/null || true`
+!`git branch --show-current`
 
 **Remote origin:**
-!`git remote get-url origin 2>/dev/null || true`
+!`git remote get-url origin`
 
 **Commits recientes:**
-!`git log --oneline -10 2>/dev/null || true`
+!`git log --oneline -10`
 
 **Diff stat:**
-!`git diff HEAD --stat 2>/dev/null || true`
+!`git diff HEAD --stat`
 
 **Argumentos recibidos:**
 $ARGUMENTS
